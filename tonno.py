@@ -20,9 +20,12 @@ password = ""
 
 influencers = "influencers/targets.txt"
 toFollow = "toFollow.txt"
+username = "bigtest255"
+password = "bigtest2"
 
 places = {
     'Avenyn' : '237978920',
+    'Riccardo' : '2073286742985736'
 }
 
 # FUNCS
@@ -139,7 +142,12 @@ class TonnoBot(object):
 
         self.targets = []
         if self.location != None:
-            self.tmp += self.getUsersFromLocation(self.location)
+            users = self.getUsersFromLocation(self.location)
+            self.tmp += list(set(users) - set(self.tmp))
+        if self.hashtags != None:
+            for hash in self.hashtags:
+                users = self.getUsersFromHashtag(hash)
+                self.tmp += list(set(users) - set(self.tmp))
         self.bot.verbosity = False
         if s:
             self.threadUsers(self.tmp)
@@ -155,8 +163,10 @@ class TonnoBot(object):
             t = threading.Thread(target=self.userWorker)
             t.daemon = True
             t.start()
-        self.bar = tqdm(total=self.followNum)
         if s :
+            if len(self.targets) < self.followNum:
+                self.followNum = len(self.targets)
+            self.bar = tqdm(total=self.followNum)
             for user_id in self.targets:
                 self.queue.put(user_id)
 
@@ -190,7 +200,7 @@ class TonnoBot(object):
             self.targets = self.bot.read_list_from_file(load)
         self.bot.follow_users(self.targets)
 
-    def followPhase(self, mixed=False, sorted=True, location=None):
+    def followPhase(self, mixed=False, sorted=True, location=None, hashtags=None):
         print("Follow phase")
         self.influencers = self.bot.read_list_from_file("influencers/targets.txt")
         done = self.bot.read_list_from_file("influencers/done.txt")
@@ -199,8 +209,9 @@ class TonnoBot(object):
                 self.influencers.remove(i)
 
         self.location = location
+        self.hashtags = hashtags
 
-        if len(self.influencers) > 0 or self.location != None:
+        if len(self.influencers) > 0 or self.location != None or self.hashtags != None:
             if not mixed and len(self.influencers) > 0:
                 self.influencers = [self.influencers[0]]
             start = time.time()
@@ -264,24 +275,30 @@ class TonnoBot(object):
 
     def getUsersFromLocation(self, location):
         users = []
-        self.bot.api.get_location_feed(location)
-        result = self.bot.last_json
-        for post in result["items"] + result["ranked_items"]:
-            try:
-                user = post["user"]["pk"]
-                if user not in users:
-                    users.append(user)
-            except:
-                pass
-        for post in result["story"]["items"]:
-            try:
-                user = post["user"]["pk"]
-                if user not in users:
-                    users.append(user)
-            except:
-                pass
+        if self.bot.api.get_location_feed(location):
+            result = self.bot.last_json
+            for post in result["items"] + result["ranked_items"]:
+                try:
+                    user = post["user"]["pk"]
+                    if user not in users:
+                        users.append(user)
+                except:
+                    pass
+            for post in result["story"]["items"]:
+                try:
+                    user = post["user"]["pk"]
+                    if user not in users:
+                        users.append(user)
+                except:
+                    pass
 
         return users
+
+    def getUsersFromHashtag(self, hashtag):
+        if not self.bot.api.get_hashtag_feed(hashtag):
+            self.bot.logger.warning("Error while getting hastag feed.")
+            return []
+        return [i['user']['pk'] for i in self.bot.api.last_json['items']]
 
 @contextlib.contextmanager
 def nostdout():
@@ -382,6 +399,7 @@ def main():
     parser.add_argument('-p', type=str, help="Password for login", default=password)
     parser.add_argument('-t', type=str, help="Add account to target", default="")
     parser.add_argument('-l', type=str, help="Location ID to grab followers", default=None)
+    parser.add_argument('-hh', help="Hashtags for following users", nargs='+', type=str)
     args = parser.parse_args()
     followNum = args.n
     tonno = TonnoBot(args.u, args.p, followNum)
@@ -402,7 +420,7 @@ def main():
         tracker.start()
         tonno.bot.console_print("Starting tactic bot!", 'green')
         tonno.bot.console_print("Running Follow Phase, DO NOT STOP!", 'green')
-        tonno.followPhase(sorted=False, location=args.l)
+        tonno.followPhase(sorted=False, location=args.l, hashtags=args.hh)
         tonno.bot.console_print("Going to sleep for 5 days, SAFE TO STOP", 'yellow')
         time.sleep(432000)
         tonno.bot.console_print("Running Unfollow Phase, DO NOT STOP!", 'green')
