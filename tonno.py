@@ -170,6 +170,7 @@ class TonnoBot(object):
 
             self.queue.join()
         else:
+            self.bar = tqdm(total=self.followNum)
             for t in self.tmp:
                 user_id = self.bot.convert_to_user_id(t)
                 if self.bot.check_user(user_id) and not user_id in self.bot.skipped_file:
