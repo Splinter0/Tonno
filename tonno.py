@@ -20,8 +20,6 @@ password = ""
 
 influencers = "influencers/targets.txt"
 toFollow = "toFollow.txt"
-username = "bigtest255"
-password = "bigtest2"
 
 places = {
     'Avenyn' : '237978920',
