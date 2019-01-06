@@ -21,6 +21,9 @@ password = ""
 influencers = "influencers/targets.txt"
 toFollow = "toFollow.txt"
 
+places = {
+    'Avenyn' : '237978920',
+}
 
 # FUNCS
 
@@ -135,14 +138,17 @@ class TonnoBot(object):
                 self.tmp += users
 
         self.targets = []
+        if self.location != None:
+            self.tmp += self.getUsersFromLocation(self.location)
         self.bot.verbosity = False
         if s:
             self.threadUsers(self.tmp)
             self.targets = sorted(self.targets, key=lambda t: self.scoreUser(t), reverse=True)
+            self.targets = [t.id for t in self.targets]
             if len(self.targets) > self.followNum:
+                self.remaining = self.targets[self.followNum:]
                 self.targets = self.targets[:self.followNum]
 
-            self.targets = [t.id for t in self.targets]
 
         self.queue = Queue()
         for i in range(2):
@@ -153,23 +159,29 @@ class TonnoBot(object):
         if s :
             for user_id in self.targets:
                 self.queue.put(user_id)
+
+            self.queue.join()
         else:
             for t in self.tmp:
                 user_id = self.bot.convert_to_user_id(t)
                 if self.bot.check_user(user_id) and not user_id in self.bot.skipped_file:
                     self.targets.append(user_id)
                     self.queue.put(user_id)
+                else:
+                    self.tmp.remove(t)
 
                 if len(self.targets) >= self.followNum:
                     break
 
-        self.queue.join()
+            self.queue.join()
+            self.remaining = list(set(self.tmp) - set(self.targets))
+
 
         self.bot.verbosity = True
 
         print("Saving targets to "+save)
         self.targetsFile = File(save)
-        self.targetsFile.save_list(self.targets)
+        self.targetsFile.save_list(self.remaining)
         done = File("influencers/done.txt")
         done.save_list(self.influencers)
 
@@ -178,7 +190,7 @@ class TonnoBot(object):
             self.targets = self.bot.read_list_from_file(load)
         self.bot.follow_users(self.targets)
 
-    def followPhase(self, mixed=False, sorted=True):
+    def followPhase(self, mixed=False, sorted=True, location=None):
         print("Follow phase")
         self.influencers = self.bot.read_list_from_file("influencers/targets.txt")
         done = self.bot.read_list_from_file("influencers/done.txt")
@@ -186,8 +198,10 @@ class TonnoBot(object):
             if i in done and not self.validUser(i, p=True):
                 self.influencers.remove(i)
 
-        if len(self.influencers) > 0:
-            if not mixed:
+        self.location = location
+
+        if len(self.influencers) > 0 or self.location != None:
+            if not mixed and len(self.influencers) > 0:
                 self.influencers = [self.influencers[0]]
             start = time.time()
             self.goFollow(toFollow, sorted)
@@ -247,6 +261,27 @@ class TonnoBot(object):
             else:
                 rate = 0.0
             self.bot.console_print("Follow back rate is "+str(rate)+"%", 'green')
+
+    def getUsersFromLocation(self, location):
+        users = []
+        self.bot.api.get_location_feed(location)
+        result = self.bot.last_json
+        for post in result["items"] + result["ranked_items"]:
+            try:
+                user = post["user"]["pk"]
+                if user not in users:
+                    users.append(user)
+            except:
+                pass
+        for post in result["story"]["items"]:
+            try:
+                user = post["user"]["pk"]
+                if user not in users:
+                    users.append(user)
+            except:
+                pass
+
+        return users
 
 @contextlib.contextmanager
 def nostdout():
@@ -340,22 +375,23 @@ class File(object):
 
 def main():
     print("Running TonnoSubito bot")
-    print("Current script's schedule:")
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('-a', type=str, help="Action : follow, unfollow, tactic")
     parser.add_argument('-n', type=int, help="Number to follow/unfollow, 0 for all", default=1000)
     parser.add_argument('-u', type=str, help="Username for login", default=username)
     parser.add_argument('-p', type=str, help="Password for login", default=password)
     parser.add_argument('-t', type=str, help="Add account to target", default="")
+    parser.add_argument('-l', type=str, help="Location ID to grab followers", default=None)
     args = parser.parse_args()
     followNum = args.n
     tonno = TonnoBot(args.u, args.p, followNum)
     tonno.login()
+
     if args.t != "":
         tonno.addTarget(args.t)
     if args.a == "follow":
         tonno.bot.console_print("Running Follow Phase, DO NOT STOP!", 'green')
-        tonno.followPhase(sorted=False)
+        tonno.followPhase(sorted=False, location=args.l)
     elif args.a == "unfollow":
         tonno.bot.console_print("Running Unfollow Phase, DO NOT STOP!", 'green')
         tonno.unfollowPhase(all=args.n == 0)
@@ -366,7 +402,7 @@ def main():
         tracker.start()
         tonno.bot.console_print("Starting tactic bot!", 'green')
         tonno.bot.console_print("Running Follow Phase, DO NOT STOP!", 'green')
-        tonno.followPhase(sorted=False)
+        tonno.followPhase(sorted=False, location=args.l)
         tonno.bot.console_print("Going to sleep for 5 days, SAFE TO STOP", 'yellow')
         time.sleep(432000)
         tonno.bot.console_print("Running Unfollow Phase, DO NOT STOP!", 'green')
