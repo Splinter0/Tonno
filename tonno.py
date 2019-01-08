@@ -255,8 +255,8 @@ class TonnoBot(object):
 
     def tracker(self):
         while self.running:
-            self.bot.console_print("Tracker going to sleep for 4 hours...", 'yellow')
-            time.sleep(14400)
+            self.bot.console_print("Tracker going to sleep for 1 hour...", 'yellow')
+            time.sleep(3600)
             with nostdout():
                 now = self.bot.get_user_followers(self.username)
                 newFollowers = list(set(now) - set(self.initialFollowers))
