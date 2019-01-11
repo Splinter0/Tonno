@@ -23,7 +23,8 @@ toFollow = "toFollow.txt"
 
 places = {
     'Avenyn' : '237978920',
-    'Riccardo' : '2073286742985736'
+    'Riccardo' : '2073286742985736',
+    'Goteborg' : '218676665'
 }
 
 # FUNCS
@@ -224,7 +225,7 @@ class TonnoBot(object):
             time.sleep(600)
             self.followPhase()
 
-    def unfollowPhase(self, load=None, all=False):
+    def unfollowPhase(self, load=None, all=False, whitelist=None):
         if load != None:
             self.targets = self.bot.read_list_from_file(load)
         elif all:
@@ -233,6 +234,8 @@ class TonnoBot(object):
             self.targets = self.bot.read_list_from_file("followed.txt")
 
         start = time.time()
+        if whitelist != None:
+            self.targets = list(set(self.targets) - set([self.bot.convert_to_user_id(user) for user in whitelist]))
 
         self.bot.verbosity = False
         self.queue = Queue()
@@ -247,6 +250,18 @@ class TonnoBot(object):
         self.queue.join()
         print("Unfollowing all " + str(len(self.targets)) + " users took : " + str(time.time() - start))
         self.bot.verbosity = True
+
+    def trackPostLikers(self):
+        self.bot.console_print("Starting post tracker...")
+        post_id = self.bot.get_media_id_from_link(self.post)
+        likers = self.bot.get_media_likers(post_id)
+        self.bot.verbosity = False
+        self.running = True
+        while self.running:
+            self.bot.console_print("Following post likers in 5 minutes...")
+            time.sleep(300)
+            self.bot.follow_users(likers)
+            likers = list(set(self.bot.get_media_likers(post_id)) - set(likers))
 
     def initial(self):
         self.bot.console_print("Loading data for tracker...", 'yellow')
@@ -397,8 +412,10 @@ def main():
     parser.add_argument('-u', type=str, help="Username for login", default=username)
     parser.add_argument('-p', type=str, help="Password for login", default=password)
     parser.add_argument('-t', type=str, help="Add account to target", default="")
-    parser.add_argument('-l', type=str, help="Location ID to grab followers", default=None)
+    parser.add_argument('-l',  help="Location ID to grab followers", nargs='+', type=str, default=None)
+    parser.add_argument('-w',  help="Whitelist users to not unfollow", nargs='+', type=str, default=None)
     parser.add_argument('-hh', help="Hashtags for following users", nargs='+', type=str)
+    parser.add_argument('-post', type=str, help="Post link to track", default=None)
     args = parser.parse_args()
     followNum = args.n
     tonno = TonnoBot(args.u, args.p, followNum)
@@ -413,8 +430,11 @@ def main():
         tonno.bot.console_print("Running Unfollow Phase, DO NOT STOP!", 'green')
         tonno.unfollowPhase(all=args.n == 0)
     elif args.a == "tactic":
+        if args.post != None:
+            tonno.post = args.post
+            postTracker = threading.Thread(target=tonno.trackPostLikers)
+            postTracker.start()
         tonno.initial()
-        tonno.running = True
         tracker = threading.Thread(target=tonno.tracker)
         tracker.start()
         tonno.bot.console_print("Starting tactic bot!", 'green')
@@ -423,7 +443,7 @@ def main():
         tonno.bot.console_print("Going to sleep for 5 days, SAFE TO STOP", 'yellow')
         time.sleep(432000)
         tonno.bot.console_print("Running Unfollow Phase, DO NOT STOP!", 'green')
-        tonno.unfollowPhase(all=True)
+        tonno.unfollowPhase(all=True, whitelist=args.w)
         tonno.bot.console_print("Going to sleep for 1 day, SAFE TO STOP", 'yellow')
         time.sleep(86400)
         tonno.running = False
