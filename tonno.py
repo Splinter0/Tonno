@@ -129,7 +129,7 @@ class TonnoBot(object):
             self.bar.update(1)
             self.queue.task_done()
 
-    def goFollow(self, save, s):
+    def goFollow(self, save, s, all=False):
         self.tmp = []
         for i in self.influencers:
             users = self.bot.get_user_followers(i)
@@ -152,7 +152,7 @@ class TonnoBot(object):
             self.threadUsers(self.tmp)
             self.targets = sorted(self.targets, key=lambda t: self.scoreUser(t), reverse=True)
             self.targets = [t.id for t in self.targets]
-            if len(self.targets) > self.followNum:
+            if not all and len(self.targets) > self.followNum:
                 self.remaining = self.targets[self.followNum:]
                 self.targets = self.targets[:self.followNum]
 
@@ -163,7 +163,7 @@ class TonnoBot(object):
             t.daemon = True
             t.start()
         if s :
-            if len(self.targets) < self.followNum:
+            if not all and len(self.targets) < self.followNum:
                 self.followNum = len(self.targets)
             self.bar = tqdm(total=self.followNum)
             for user_id in self.targets:
@@ -171,7 +171,7 @@ class TonnoBot(object):
 
             self.queue.join()
         else:
-            self.bar = tqdm(total=self.followNum)
+            self.bar = tqdm(total=self.followNum if not all else len(self.targets))
             for t in self.tmp:
                 user_id = self.bot.convert_to_user_id(t)
                 if self.bot.check_user(user_id) and not user_id in self.bot.skipped_file:
@@ -180,7 +180,7 @@ class TonnoBot(object):
                 else:
                     self.tmp.remove(t)
 
-                if len(self.targets) >= self.followNum:
+                if not all and len(self.targets) >= self.followNum:
                     break
 
             self.queue.join()
@@ -200,7 +200,7 @@ class TonnoBot(object):
             self.targets = self.bot.read_list_from_file(load)
         self.bot.follow_users(self.targets)
 
-    def followPhase(self, mixed=False, sorted=True, location=None, hashtags=None):
+    def followPhase(self, mixed=False, sorted=True, location=None, hashtags=None, all=False):
         print("Follow phase")
         self.influencers = self.bot.read_list_from_file("influencers/targets.txt")
         done = self.bot.read_list_from_file("influencers/done.txt")
@@ -215,7 +215,7 @@ class TonnoBot(object):
             if not mixed and len(self.influencers) > 0:
                 self.influencers = [self.influencers[0]]
             start = time.time()
-            self.goFollow(toFollow, sorted)
+            self.goFollow(toFollow, sorted, all=all)
             print("Following all "+str(len(self.targets))+" users took : " + str(time.time() - start))
 
         else:
@@ -439,7 +439,7 @@ def main():
         tracker.start()
         tonno.bot.console_print("Starting tactic bot!", 'green')
         tonno.bot.console_print("Running Follow Phase, DO NOT STOP!", 'green')
-        tonno.followPhase(sorted=False, location=args.l, hashtags=args.hh)
+        tonno.followPhase(sorted=False, location=args.l, hashtags=args.hh, all=args.n == 0)
         tonno.bot.console_print("Going to sleep for 5 days, SAFE TO STOP", 'yellow')
         time.sleep(432000)
         tonno.bot.console_print("Running Unfollow Phase, DO NOT STOP!", 'green')
